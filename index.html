@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="tr" data-mode="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Gizlilik: uygulama dışarıya hiçbir bağlantı kuramaz -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>Kayıt Defteri</title>
+<meta name="description" content="İşyerinde yaşanan olayları kaydeden kişisel defter. Kayıtlar yalnızca bu cihazda, şifreli tutulur.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Defter">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f1f3f0">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ================= KİLİT EKRANI ================= -->
+<div id="lock" class="lockscreen gutter">
+  <div class="lockbox" id="setup" hidden>
+    <img class="logo" src="icon-192.png" alt="">
+    <h1>Kayıt Defteri</h1>
+    <p class="note">İşyerinde yaşadığın baskıyı tarih, saat, kişi ve tanıklarıyla düzenli biçimde kaydet. Kayıtların ve fotoğrafların <b>sadece bu telefonda</b> ve <b>şifreli</b> durur, hiçbir sunucuya gönderilmez.</p>
+    <div class="field">
+      <span class="lb">Nerede çalışıyorsun?</span>
+      <div class="choice">
+        <label><input type="radio" name="s-sektor" value="kamu" checked> Kamu</label>
+        <label><input type="radio" name="s-sektor" value="ozel"> Özel sektör</label>
+      </div>
+    </div>
+    <div class="field"><label class="lb" for="s-ad">Adın <small>(sana böyle hitap edelim)</small></label><input id="s-ad" autocomplete="given-name" placeholder="Örn. Süleyman"></div>
+    <div class="field"><label class="lb" for="s-pin">PIN belirle <small>(4–8 rakam)</small></label><input class="pin" id="s-pin" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8"></div>
+    <div class="field"><label class="lb" for="s-pin2">PIN'i tekrar yaz</label><input class="pin" id="s-pin2" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8"></div>
+    <div class="warnbox">PIN'ini unutursan kayıtlar açılamaz, kimse kurtaramaz. Kolay tahmin edilemeyen ama unutmayacağın bir PIN seç.</div>
+    <button class="btn block" id="s-btn" type="button">Defteri oluştur</button>
+    <p class="msg" id="s-msg" role="status"></p>
+    <p class="note small">Devam ederek <button class="linkbtn small" type="button" id="s-kvkk">KVKK bilgilendirmesini</button> okuduğunu kabul edersin.</p>
+  </div>
+
+  <div class="lockbox" id="unlock" hidden>
+    <img class="logo" src="icon-192.png" alt="">
+    <h1 id="u-hello">Kayıt Defteri</h1>
+    <div class="field"><label class="lb" for="u-pin">PIN</label><input class="pin" id="u-pin" type="password" inputmode="numeric" autocomplete="current-password" maxlength="8"></div>
+    <button class="btn block" id="u-btn" type="button">Aç</button>
+    <p class="msg" id="u-msg" role="status"></p>
+    <button class="linkbtn" id="u-forgot" type="button">PIN'imi unuttum</button>
+    <div class="card" id="forgot" hidden>
+      <p class="note">Kayıtlar PIN'inle şifrelendiği için PIN olmadan açılamaz. Yedeğin varsa yeni bir defter oluşturup Menü › Yedek bölümünden geri yükleyebilirsin (yedeği hangi PIN ile aldıysan o gerekir).</p>
+      <button class="btn danger" id="f-reset" type="button">Tüm kayıtları silip yeniden başla</button>
+    </div>
+  </div>
+
+  <div class="lockbox" id="kvkk-pre" hidden></div>
+</div>
+
+<!-- ================= UYGULAMA ================= -->
+<div id="app" hidden>
+  <header class="top gutter">
+    <button class="backbtn" id="backBtn" type="button" hidden>‹ Geri</button>
+    <h1 id="pageTitle">Ana sayfa</h1>
+    <button class="iconbtn" id="lockBtn" type="button" aria-label="Defteri kilitle">
+      <svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Kilitle
+    </button>
+  </header>
+
+  <main class="gutter">
+
+    <!-- ANA SAYFA -->
+    <section class="panel" id="p-ana">
+      <div class="hello"><h2 id="helloText">Merhaba</h2><p id="helloSub"></p></div>
+      <div class="stats" id="homeStats"></div>
+      <div class="card tint">
+        <div class="card-head"><h3>Süreklilik</h3><span class="chip acc" id="contChip"></span></div>
+        <div class="meter"><i id="contMeter" style="width:0%"></i></div>
+        <p class="note" id="contText"></p>
+      </div>
+      <div class="card" id="alertsCard" hidden>
+        <h3>Dikkat edilecekler</h3>
+        <div class="mini" id="alerts"></div>
+      </div>
+      <div class="quick">
+        <button type="button" data-go="ekle"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Olay ekle</button>
+        <button type="button" data-go="basvuru-form"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M9 14h6M9 18h4"/></svg>Başvuru ekle</button>
+        <button type="button" data-go="rapor"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Rapor</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>Son olaylar</h3><button class="linkbtn small" type="button" data-go="kayitlar">Tümü</button></div>
+        <div class="mini" id="recentList"></div>
+      </div>
+    </section>
+
+    <!-- OLAY EKLE / DÜZENLE -->
+    <section class="panel" id="p-ekle" hidden>
+      <div class="infobox" id="editBanner" hidden>Bir kaydı düzenliyorsun. Kaydedince "düzenlendi" notu ve zamanı eklenir.</div>
+      <form id="form" novalidate>
+        <div class="card">
+          <h3>Ne zaman, nerede?</h3>
+          <div class="row">
+            <div class="field"><label class="lb" for="f-tarih">Tarih</label><input type="date" id="f-tarih"></div>
+            <div class="field"><label class="lb" for="f-saat">Saat</label><input type="time" id="f-saat"></div>
+          </div>
+          <div class="field"><label class="lb" for="f-yer">Yer</label><input id="f-yer" placeholder="Örn. müdür odası, BT odası, WhatsApp grubu"></div>
+        </div>
+
+        <div class="card">
+          <h3>Kim?</h3>
+          <div class="field"><label class="lb" for="f-kim">Ad soyad</label><input id="f-kim" list="kisiler" autocomplete="off" placeholder="Davranışı yapan kişi"><datalist id="kisiler"></datalist></div>
+          <div class="field"><label class="lb" for="f-rol">Görevi / unvanı</label><input id="f-rol" list="roller" placeholder="Örn. birim sorumlusu, müdür"><datalist id="roller"></datalist></div>
+        </div>
+
+        <div class="card">
+          <h3>Ne tür bir davranış?</h3>
+          <div class="field"><label class="lb" for="f-kat">Grup <small>(Leymann sınıflaması)</small></label><select id="f-kat"></select></div>
+          <div class="field"><label class="lb" for="f-dav">Davranış</label><select id="f-dav"></select></div>
+          <div class="field" id="f-dav-diger-wrap" hidden><label class="lb" for="f-dav-diger">Kısaca yaz</label><input id="f-dav-diger"></div>
+          <div class="field">
+            <span class="lb">Şiddeti</span>
+            <div class="scale" id="f-siddet" role="group" aria-label="Şiddet derecesi">
+              <button type="button" data-v="1">1<small>Hafif</small></button>
+              <button type="button" data-v="2">2<small>Orta</small></button>
+              <button type="button" data-v="3">3<small>Ciddi</small></button>
+              <button type="button" data-v="4">4<small>Ağır</small></button>
+              <button type="button" data-v="5">5<small>Çok ağır</small></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Ne oldu?</h3>
+          <div class="field"><label class="lb" for="f-ne">Olayın anlatımı</label><textarea id="f-ne" placeholder="Ne yapıldı, ne istendi, sen ne cevap verdin? Yorum katmadan, olduğu gibi."></textarea></div>
+          <div class="field"><label class="lb" for="f-soz">Aynen söylenen söz</label><textarea id="f-soz" placeholder="Duyduğun gibi, kelimesi kelimesine"></textarea><span class="hint">Mahkemede en değerli kısım burasıdır. Hatırladığın kadarını yaz.</span></div>
+        </div>
+
+        <div class="card">
+          <h3>Delil</h3>
+          <div class="field"><label class="lb" for="f-tanik">Tanıklar</label><input id="f-tanik" placeholder="Orada kim vardı? Virgülle ayır"></div>
+          <div class="field"><label class="lb" for="f-kanit">Diğer kanıtlar</label><input id="f-kanit" placeholder="Örn. görevlendirme yazısı sayı 123, e-posta"></div>
+          <div class="field">
+            <span class="lb">Fotoğraflar <small>(ekran görüntüsü, belge, liste)</small></span>
+            <div class="thumbs" id="f-thumbs"></div>
+            <input type="file" id="f-foto" accept="image/*" multiple hidden>
+            <button class="btn soft" type="button" id="f-fotoBtn"><svg viewBox="0 0 24 24"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Fotoğraf ekle</button>
+            <span class="hint">Fotoğraflar şifrelenir. Konum ve cihaz bilgileri silinir, sadece görüntü kalır.</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Sende bıraktığı etki <small class="note">(isteğe bağlı)</small></h3>
+          <div class="field"><label class="lb" for="f-etkiIs">İşine etkisi</label><input id="f-etkiIs" placeholder="Örn. görev yerim değişti, izin alamadım"></div>
+          <div class="field"><label class="lb" for="f-etkiSag">Sağlığına etkisi</label><input id="f-etkiSag" placeholder="Örn. uyuyamadım, doktora gittim"></div>
+        </div>
+
+        <button class="btn block" type="submit" id="saveBtn">Kaydet</button>
+        <button class="btn ghost block" type="button" id="cancelEdit" hidden>Düzenlemeyi bırak</button>
+        <p class="msg" id="formMsg" role="status"></p>
+        <p class="note">Kaydı girdiğin an otomatik yazılır ve değiştirilemez. Olayı aynı gün kaydetmek kaydı daha inandırıcı yapar.</p>
+      </form>
+    </section>
+
+    <!-- KAYITLAR -->
+    <section class="panel" id="p-kayitlar" hidden>
+      <input id="q-ara" type="search" placeholder="Kayıtlarda ara (isim, söz, yer…)">
+      <div class="filters">
+        <div class="field"><label class="lb" for="q-kim">Kişi</label><select id="q-kim"></select></div>
+        <div class="field"><label class="lb" for="q-kat">Grup</label><select id="q-kat"></select></div>
+      </div>
+      <p class="note" id="listCount"></p>
+      <div class="list" id="list"></div>
+    </section>
+
+    <!-- BAŞVURULAR -->
+    <section class="panel" id="p-basvurular" hidden>
+      <div class="infobox">Verdiğin dilekçeleri ve şikâyetleri buraya kaydet. Kurum içi şikâyetlere 30 gün içinde karar verilmesi, dilekçelere 30 gün içinde cevap verilmesi gerekir. Süresi geçen başvurular uyarı olarak görünür.</div>
+      <button class="btn" type="button" data-go="basvuru-form">+ Yeni başvuru</button>
+      <div class="list" id="appList"></div>
+    </section>
+
+    <section class="panel" id="p-basvuru-form" hidden>
+      <div class="card form">
+        <div class="field"><label class="lb" for="b-kurum">Nereye başvurdun?</label><select id="b-kurum"></select></div>
+        <div class="row stack">
+          <div class="field"><label class="lb" for="b-tarih">Başvuru tarihi</label><input type="date" id="b-tarih"></div>
+          <div class="field"><label class="lb" for="b-sayi">Evrak / başvuru no</label><input id="b-sayi" placeholder="Örn. E-12345 veya CİMER no"></div>
+        </div>
+        <div class="field"><label class="lb" for="b-konu">Konu</label><input id="b-konu" placeholder="Örn. birim sorumlusunun sözlü baskıları"></div>
+        <div class="row stack">
+          <div class="field"><label class="lb" for="b-durum">Durum</label>
+            <select id="b-durum"><option>Bekliyor</option><option>Cevap geldi</option><option>Sonuçlandı</option><option>Geri çekildi</option></select></div>
+          <div class="field"><label class="lb" for="b-sure">Beklenen cevap süresi (gün)</label><input type="number" id="b-sure" inputmode="numeric" min="1" max="365" value="30"></div>
+        </div>
+        <div class="row stack">
+          <div class="field"><label class="lb" for="b-ctarih">Cevap tarihi</label><input type="date" id="b-ctarih"></div>
+          <div class="field"><label class="lb" for="b-sonuc">Sonuç / cevap özeti</label><input id="b-sonuc"></div>
+        </div>
+        <div class="field"><label class="lb" for="b-not">Not</label><textarea id="b-not" placeholder="Örn. dilekçeyi yazı işlerine teslim ettim, görevli adı"></textarea></div>
+        <p class="note" id="b-info"></p>
+        <button class="btn block" type="button" id="b-save">Başvuruyu kaydet</button>
+        <p class="msg" id="b-msg" role="status"></p>
+      </div>
+    </section>
+
+    <!-- MENÜ -->
+    <section class="panel" id="p-menu" hidden>
+      <p class="menu-title">Dosya</p>
+      <div class="menu">
+        <button type="button" data-go="ozet"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span><span class="tx">Özet ve zaman çizelgesi<small>Süreklilik, kişiler, gruplar</small></span><span class="chev">›</span></button>
+        <button type="button" data-go="rapor"><span class="ic"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg></span><span class="tx">Rapor ve yazdır<small>Resmi düzende olay dosyası</small></span><span class="chev">›</span></button>
+        <button type="button" data-go="dilekce"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span><span class="tx">Dilekçe şablonları<small>Kayıtlarından otomatik doldurulur</small></span><span class="chev">›</span></button>
+      </div>
+      <p class="menu-title">Bilgi</p>
+      <div class="menu">
+        <button type="button" data-go="rehber"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg></span><span class="tx">Rehber<small>Haklar, başvuru yolları, süreler</small></span><span class="chev">›</span></button>
+        <button type="button" data-go="kvkk"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span><span class="tx">KVKK bilgilendirmesi<small>Verilerin nasıl korunuyor</small></span><span class="chev">›</span></button>
+      </div>
+      <p class="menu-title">Ayarlar</p>
+      <div class="menu">
+        <button type="button" data-go="profil"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="tx">Profil ve tema<small>Bilgilerin, renk, yazı boyutu</small></span><span class="chev">›</span></button>
+        <button type="button" data-go="guvenlik"><span class="ic"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></span><span class="tx">Gizlilik ve güvenlik<small>PIN, otomatik kilit, silme</small></span><span class="chev">›</span></button>
+        <button type="button" data-go="yedek"><span class="ic"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg></span><span class="tx">Yedek<small id="menuBackup">Yedek al, geri yükle</small></span><span class="chev">›</span></button>
+      </div>
+      <p class="note small" style="text-align:center">Kayıt Defteri · sürüm 2.0 · Bilgiler Kasım 2026 itibarıyla derlendi</p>
+    </section>
+
+    <!-- ÖZET -->
+    <section class="panel" id="p-ozet" hidden>
+      <div class="stats" id="sumStats"></div>
+      <div class="card">
+        <h3>Aylara göre olaylar <small class="note">(son 12 ay)</small></h3>
+        <div class="months" id="months"></div>
+      </div>
+      <div class="card">
+        <h3>Son 26 hafta</h3>
+        <div class="weeks" id="weeks"></div>
+        <p class="note" id="weeksText"></p>
+      </div>
+      <div class="card"><h3>Kişilere göre</h3><div class="bars" id="byPerson"></div></div>
+      <div class="card"><h3>Davranış gruplarına göre</h3><div class="bars" id="byKat"></div></div>
+      <div class="card"><h3>Şiddet dağılımı</h3><div class="bars" id="bySev"></div></div>
+    </section>
+
+    <!-- RAPOR -->
+    <section class="panel" id="p-rapor" hidden>
+      <div class="card">
+        <h3>Olay dosyası</h3>
+        <p class="note">Kapak, içindekiler, özet tablolar, numaralı olaylar, tanık listesi, başvuru takibi, fotoğraf ekleri ve beyan bölümüyle A4 düzeninde hazırlanır.</p>
+        <div class="row stack">
+          <div class="field"><label class="lb" for="r-bas">Başlangıç</label><input type="date" id="r-bas"></div>
+          <div class="field"><label class="lb" for="r-bit">Bitiş</label><input type="date" id="r-bit"></div>
+        </div>
+        <div class="field"><label class="lb" for="r-kim">Kişi</label><select id="r-kim"></select></div>
+        <label class="toggle"><span>Fotoğraf eklerini dahil et</span><input type="checkbox" id="r-foto" checked></label>
+        <label class="toggle"><span>"Sağlığına etkisi" bilgisini dahil et</span><input type="checkbox" id="r-saglik" checked></label>
+        <p class="note" id="r-count"></p>
+        <button class="btn block" type="button" id="r-print"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8" rx="1"/></svg>Yazdır / PDF olarak kaydet</button>
+        <button class="btn ghost block" type="button" id="r-share">Dosya olarak paylaş (.html)</button>
+        <p class="msg" id="r-msg" role="status"></p>
+        <p class="hint">iPhone'da yazdırma ekranında yazıcı seçebilir ya da sağ üstteki paylaş düğmesiyle PDF olarak kaydedebilirsin. Yazdırma çalışmazsa "Dosya olarak paylaş" ile kaydedip Dosyalar uygulamasından aç ve oradan yazdır.</p>
+      </div>
+      <div class="warnbox">Bu dosya hassas kişisel veriler içerir. Yalnızca avukatına, sendikana ya da başvurduğun resmi kuruma ver. Sosyal medyada paylaşma.</div>
+    </section>
+
+    <!-- DİLEKÇE -->
+    <section class="panel" id="p-dilekce" hidden>
+      <div class="card">
+        <div class="field"><label class="lb" for="d-tur">Şablon</label><select id="d-tur"></select></div>
+        <div class="field"><label class="lb" for="d-makam">Hitap edilen makam</label><input id="d-makam" placeholder="Örn. ... Hastanesi Başhekimliğine"></div>
+        <div class="field"><label class="lb" for="d-olay">Dilekçede anılacak olaylar</label><select id="d-olay"><option value="hepsi">Tümü (özet)</option><option value="agir">Şiddeti 3 ve üzeri olanlar</option><option value="son5">Son 5 olay</option></select></div>
+        <button class="btn soft" type="button" id="d-olustur">Dilekçeyi oluştur</button>
+        <p class="note" id="d-info"></p>
+      </div>
+      <div class="card" id="d-out" hidden>
+        <label class="lb" for="d-metin">Dilekçe metni <small>(düzenleyebilirsin)</small></label>
+        <textarea id="d-metin" style="min-height:360px;font-size:15px"></textarea>
+        <div class="btns">
+          <button class="btn" type="button" id="d-print">Yazdır / PDF</button>
+          <button class="btn ghost" type="button" id="d-copy">Kopyala</button>
+          <button class="btn ghost" type="button" id="d-share">Paylaş</button>
+        </div>
+        <p class="msg" id="d-msg" role="status"></p>
+        <p class="hint">Şablon bir başlangıçtır. Göndermeden önce oku, eksik bilgileri tamamla ve mümkünse bir avukata ya da sendikana göster.</p>
+      </div>
+    </section>
+
+    <!-- REHBER -->
+    <section class="panel" id="p-rehber" hidden>
+      <div class="card-head">
+        <p class="note" style="flex:1">Genel bilgidir, hukuki danışmanlık yerine geçmez. Kasım 2026 itibarıyla resmi metinler ve yargı kararlarından derlendi.</p>
+        <div class="seg" role="group" aria-label="Çalıştığın yer"><button type="button" data-sek="kamu" aria-pressed="true">Kamu</button><button type="button" data-sek="ozel" aria-pressed="false">Özel</button></div>
+      </div>
+
+      <details class="doc" open>
+        <summary>Mobbing nedir?</summary>
+        <div class="body">
+          <p><b>Resmi tanım:</b> 2025/3 sayılı Cumhurbaşkanlığı Genelgesi psikolojik tacizi, çalışanların iş yerinde kasıtlı ve sistematik olarak belirli bir süre aşağılanması, küçümsenmesi, dışlanması, kişilik ve saygınlığının zedelenmesi, kötü muameleye ve yıldırmaya maruz bırakılması olarak tanımlar.</p>
+          <p><b>Yargıtay'ın aradığı unsurlar:</b></p>
+          <ul>
+            <li>Belirli bir çalışanın <b>hedef alınması</b>,</li>
+            <li>Davranışların uzun süre boyunca, belli aralıklarla <b>sistematik ve sürekli</b> tekrarlanması,</li>
+            <li>Şeref, kişilik, yetenek gibi değerlere yönelik bir <b>saldırı</b> olması,</li>
+            <li>Kişiyi zihinsel, ruhsal ya da bedensel olarak etkileyebilecek nitelikte olması.</li>
+          </ul>
+          <p><b>Bilimsel ölçüt:</b> Mobbing kavramını tanımlayan Heinz Leymann'a göre davranışların <b>en az haftada bir</b> tekrarlanması ve <b>en az altı ay</b> sürmesi gerekir. Leymann 45 davranışı 5 grupta toplar. Uygulamadaki "Grup" seçimi bu sınıflamaya dayanır.</p>
+          <p class="src">Kaynak: 2025/3 sayılı Genelge, RG 06.03.2025, sayı 32833 · Yargıtay 22. HD, E. 2014/3426, K. 2014/4165, T. 27.02.2014 · Leymann (1990, 1993), Anadolu Üniv. akademik çalışmalarında aktarıldığı şekliyle.</p>
+        </div>
+      </details>
+
+      <details class="doc">
+        <summary>Mobbing sayılmayan durumlar</summary>
+        <div class="body">
+          <p>Dürüst ve güçlü bir dosya için hangi durumların tek başına mobbing sayılmadığını bilmek önemlidir:</p>
+          <ul>
+            <li><b>Tek seferlik ya da ara sıra yaşanan</b> kaba, nezaketsiz veya haksız davranışlar. Yargıtay, süreklilik göstermeyen, münferit birkaç olayı mobbing saymamıştır.</li>
+            <li><b>Sistematik olmayan baskı:</b> Davranış haksız olsa bile belli aralıklarla tekrarlanmıyorsa mobbing unsuru eksik kalır. Bu durumda başka haklar (ör. haklı fesih) doğabilir ama mobbingden manevi tazminat istenemeyebilir.</li>
+            <li><b>Herkese eşit uygulanan, hukuka uygun iş talimatları</b> ve işin gereği olan olağan eleştiriler.</li>
+            <li><b>Karşılıklı tartışma ve kişisel çatışmalar:</b> Taraflar arasında eşit güçte, karşılıklı bir anlaşmazlık genellikle mobbing olarak değerlendirilmez.</li>
+          </ul>
+          <div class="infobox">Bu yüzden her olayı kaydetmek önemli: tek tek "küçük" görünen olaylar, tarih sırasıyla yan yana gelince süreklilik ve sistematiklik ortaya çıkar.</div>
+          <p class="src">Kaynak: Yargıtay 22. HD, E. 2014/3426, K. 2014/4165, T. 27.02.2014. Son iki madde, yargı kararları ve öğretide genel kabul gören değerlendirmelerdir. Somut durum için avukata danışılmalıdır.</p>
+        </div>
+      </details>
+
+      <details class="doc">
+        <summary>Delil nasıl toplanır?</summary>
+        <div class="body">
+          <ul>
+            <li><b>Olay kaydı:</b> Her olayı aynı gün, tarih, saat, yer, kişi, aynen söylenen söz ve tanıklarla kaydet.</li>
+            <li><b>Yazılı izler:</b> Görevlendirme yazıları, tebligatlar, e-postalar, mesajlaşmalar, nöbet ve çalışma listelerinin her sürümü.</li>
+            <li><b>Tanıklar:</b> Olayları görenleri not et. Tanık bilgilerini paylaşmadan önce onlarla konuş.</li>
+            <li><b>Sağlık kayıtları:</b> Şikâyetlerin varsa doktora başvur. Muayene kayıtları yaşananların etkisini belgeler.</li>
+            <li><b>Yaklaşık ispat:</b> Yargıtay mobbingde kesin ispat yerine güçlü belirtileri (yaklaşık ispat) yeterli görmektedir. Belirtiler ortaya konunca, mobbing olmadığını ispat yükü karşı tarafa geçebilir.</li>
+          </ul>
+          <div class="warnbox"><b>Gizli ses kaydı:</b> Kişiler arasındaki konuşmayı izinsiz kayda almak TCK 133 kapsamında suç oluşturabilir. Yargıtay bazı kararlarında, kayıt yapana karşı işlenmekte olan bir suçla ilgili, ani gelişen ve başka türlü ispat imkânı olmayan durumlarda yapılan kaydı hukuka uygun delil saymıştır. Kayıt almadan önce mutlaka bir avukata danış.</div>
+          <p class="src">Kaynak: Yargıtay'ın yaklaşık ispat yaklaşımı (iş hukuku öğretisi ve kararlarda aktarıldığı şekliyle) · TCK md. 133 · Yargıtay 18. Ceza Dairesi kararı (2017, basında aktarıldığı şekliyle).</p>
+        </div>
+      </details>
+
+      <details class="doc" data-sek="kamu">
+        <summary>Kamu çalışanı: başvuru yolları ve süreler</summary>
+        <div class="body">
+          <ol>
+            <li><b>Kurum içi şikâyet:</b> Devlet memurları şikâyetlerini <span class="law">657 s.K. md. 21</span> uyarınca amir sırasıyla yapar. Devlet Memurlarının Şikâyet ve Müracaatları Hakkında Yönetmelik'e göre şikâyet hakkında <b>30 gün</b> içinde karar verilir. Karara karşı tebliğden itibaren <b>10 gün</b> içinde üst makama itiraz edilebilir. Dilekçeni evrak kaydına sokup <b>sayı ve tarih</b> al.</li>
+            <li><b>Disiplin soruşturması:</b> İdare, psikolojik tacizi öğrendiğinde soruşturmayı kendiliğinden başlatabilir. Hakaret, aşağılama ve tehdit gibi davranışlar <span class="law">657 s.K. md. 125</span> kapsamında disiplin cezası gerektirebilir.</li>
+            <li><b>Dilekçeye cevap süresi:</b> <span class="law">3071 s.K.</span> uyarınca dilekçelere en geç <b>30 gün</b> içinde cevap verilmesi gerekir.</li>
+            <li><b>Kamu Denetçiliği Kurumu:</b> Önce idareye başvurman gerekir. İdarenin cevabının tebliğinden ya da 60 gün içinde cevap verilmemesinden sonra <b>6 ay</b> içinde başvurulabilir. Başvuru <b>ücretsizdir</b>, gizli tutulması istenebilir ve dava açma süresini durdurur <span class="law">6328 s.K. md. 17</span>.</li>
+            <li><b>Kamu Görevlileri Etik Kurulu:</b> Etik davranış ilkelerinin ihlali için başvurulabilir <span class="law">5176 s.K.</span>.</li>
+            <li><b>İdari yargı:</b> Mobbing amaçlı idari işlemlere (ör. unvan dışı görevlendirme, haksız disiplin cezası) karşı <b>iptal davası</b>, uğranılan zarar için <b>tam yargı davası</b> açılabilir. Genel dava süresi idare mahkemelerinde <b>60 gündür</b> <span class="law">2577 s. İYUK md. 7</span>. İdareye yapılan başvuruya <b>30 gün</b> içinde cevap verilmezse istek reddedilmiş sayılır <span class="law">İYUK md. 10</span>.</li>
+            <li><b>Ceza yolu:</b> Davranış aynı zamanda suç oluşturuyorsa savcılığa şikâyet edilebilir. Memurlar hakkında görevle ilgili suçlarda soruşturma için izin gerekir <span class="law">4483 s.K.</span>.</li>
+          </ol>
+          <p class="src">Kaynak: 657, 3071, 4483, 5176, 6328 ve 2577 sayılı Kanunlar · İYUK md. 10'daki 30 günlük süre: 7331 s.K., RG 14.07.2021 · Şikâyet ve Müracaatlar Yönetmeliği md. 8–9.</p>
+        </div>
+      </details>
+
+      <details class="doc" data-sek="ozel" hidden>
+        <summary>Özel sektör çalışanı: haklar ve süreler</summary>
+        <div class="body">
+          <ol>
+            <li><b>İşverenin yükümlülüğü:</b> <span class="law">TBK md. 417</span> uyarınca işveren, işçilerin psikolojik ve cinsel tacize uğramamaları ve tacize uğrayanların daha fazla zarar görmemeleri için gerekli önlemleri almakla yükümlüdür. Bu yükümlülüğe aykırılıktan doğan zararlar sözleşmeye aykırılık hükümlerine tabidir.</li>
+            <li><b>Yazılı bildirim:</b> Durumu işverene ya da insan kaynaklarına yazılı (e-posta veya noter) bildir ve kopyasını sakla.</li>
+            <li><b>Haklı nedenle fesih:</b> Mobbing, <span class="law">İş K. md. 24/II-b, c</span> (şeref ve namusa dokunan söz ve davranışlar, sataşma ve gözdağı) kapsamında haklı fesih sebebi olabilir. Fesih, olayı öğrenmeden itibaren <b>6 iş günü</b> ve her hâlde <b>1 yıl</b> içinde yapılmalıdır <span class="law">İş K. md. 26</span>. En az 1 yıl kıdemin varsa kıdem tazminatı istenebilir. Haklı fesihte ihbar tazminatı doğmaz.</li>
+            <li><b>Düz istifa etme:</b> Gerekçesiz istifada kıdem tazminatı hakkını kaybedebilirsin. Ayrılmadan önce mutlaka bir avukata danış.</li>
+            <li><b>Zorunlu arabuluculuk:</b> İşçilik alacakları ve tazminat talepleriyle ilgili davalarda, dava açmadan önce arabulucuya başvurmak <b>dava şartıdır</b> <span class="law">7036 s.K. md. 3</span>. Başvuru, karşı tarafın yerleşim yerindeki ya da işin yapıldığı yerdeki arabuluculuk bürosuna yapılır. Manevi tazminat taleplerinin bu kapsama girip girmediği tartışmalıdır, avukatına sor.</li>
+            <li><b>Bakanlığa şikâyet:</b> ALO 170 ya da CİMER üzerinden Çalışma ve Sosyal Güvenlik Bakanlığı'na başvurabilirsin.</li>
+          </ol>
+          <p class="src">Kaynak: 6098 s. TBK md. 417 · 4857 s. İş Kanunu md. 24, 26 · 7036 s. İş Mahkemeleri Kanunu md. 3 · 2025/3 sayılı Genelge.</p>
+        </div>
+      </details>
+
+      <details class="doc">
+        <summary>Başvurabileceğin kurumlar</summary>
+        <div class="body">
+          <p>2025/3 sayılı Genelge'ye göre psikolojik tacize uğrayan çalışanlar şu yollara başvurabilir:</p>
+          <ul>
+            <li><b>Çalıştığı kurum</b> (ilgili mevzuata göre)</li>
+            <li><b>ALO 170:</b> Çalışma ve Sosyal Güvenlik İletişim Merkezi. Görevli <b>psikologlar</b> aracılığıyla bilgilendirme ve destek sağlanır.</li>
+            <li><b>CİMER</b> (cimer.gov.tr)</li>
+            <li><b>TBMM Dilekçe Komisyonu</b></li>
+            <li><b>Çalışma ve Sosyal Güvenlik Bakanlığı</b></li>
+            <li><b>TİHEK</b> (tihek.gov.tr): 6701 sayılı Kanun, ayrımcılık temellerine (ör. cinsiyet, engellilik, din, sağlık durumu) dayanan işyerinde yıldırmayı yasaklar. Ayrımcılık temelli bir yıldırma varsa başvurabilirsin <span class="law">6701 s.K. md. 17</span>.</li>
+            <li><b>Kamu Denetçiliği Kurumu</b> (ombudsman.gov.tr): kamu idareleri hakkında.</li>
+          </ul>
+          <p>Ayrıca: <b>sendikan</b> (hukuki destek) ve avukat ücreti ödeyemiyorsan bulunduğun ilin <b>barosundan adli yardım</b>.</p>
+          <p class="src">Kaynak: 2025/3 sayılı Genelge (RG 06.03.2025/32833) · TİHEK açıklaması, 07.03.2025 · 6701 s.K.</p>
+        </div>
+      </details>
+
+      <details class="doc">
+        <summary>Suç oluşturabilecek davranışlar</summary>
+        <div class="body">
+          <p>Hakaret, tehdit gibi bazı davranışlar mobbingin yanında ayrıca suç oluşturabilir. Bunlar için Cumhuriyet Başsavcılığına şikâyette bulunulabilir. Şikâyete bağlı suçlarda şikâyet süresi, fiili ve faili öğrendiğin günden itibaren <b>6 aydır</b> <span class="law">TCK md. 73</span>. Bu süreyi kaçırmamak için olay kayıtlarındaki tarihler önemlidir.</p>
+          <p class="src">Kaynak: 5237 s. Türk Ceza Kanunu md. 73.</p>
+        </div>
+      </details>
+
+      <details class="doc">
+        <summary>Destek ve sağlığın</summary>
+        <div class="body">
+          <p>Uzun süreli baskı uyku, kaygı ve beden sağlığını etkileyebilir. ALO 170'teki psikologlardan destek alabilir, bir hekime başvurabilirsin. Yalnız kalma: sendikan, güvendiğin bir arkadaşın ya da ailenle konuş.</p>
+        </div>
+      </details>
+
+      <details class="doc">
+        <summary>Mevzuat ve kaynak listesi</summary>
+        <div class="body">
+          <div class="tblwrap"><table class="tbl">
+            <thead><tr><th>Düzenleme</th><th>Konu</th></tr></thead>
+            <tbody>
+              <tr><td>2025/3 s. Cumhurbaşkanlığı Genelgesi (RG 06.03.2025, 32833)</td><td>Mobbingin önlenmesi; 2011/2 sayılı Genelge'yi kaldırdı</td></tr>
+              <tr><td>6098 s. Türk Borçlar Kanunu md. 417</td><td>İşverenin psikolojik tacizi önleme yükümlülüğü</td></tr>
+              <tr><td>4857 s. İş Kanunu md. 24, 26</td><td>İşçinin haklı fesih hakkı ve süreleri</td></tr>
+              <tr><td>7036 s. İş Mahkemeleri Kanunu md. 3</td><td>Zorunlu arabuluculuk</td></tr>
+              <tr><td>657 s. Devlet Memurları Kanunu md. 21, 125</td><td>Şikâyet hakkı, disiplin</td></tr>
+              <tr><td>3071 s. Dilekçe Hakkının Kullanılmasına Dair Kanun</td><td>30 gün içinde cevap</td></tr>
+              <tr><td>2577 s. İYUK md. 7, 10</td><td>Dava süresi, zımni ret (30 gün, 7331 s.K. ile)</td></tr>
+              <tr><td>6328 s. Kamu Denetçiliği Kurumu Kanunu md. 17</td><td>Ombudsman başvurusu</td></tr>
+              <tr><td>6701 s. TİHEK Kanunu</td><td>Ayrımcılık temelli işyerinde yıldırma</td></tr>
+              <tr><td>5176 s. Kanun</td><td>Kamu Görevlileri Etik Kurulu</td></tr>
+              <tr><td>5237 s. TCK md. 73, 133</td><td>Şikâyet süresi; konuşmaların kayda alınması</td></tr>
+              <tr><td>6698 s. KVKK (7499 s.K. ile 2024 değişiklikleri)</td><td>Kişisel verilerin korunması</td></tr>
+            </tbody>
+          </table></div>
+          <p class="src">Güncel metinler için: mevzuat.gov.tr · resmigazete.gov.tr. Mevzuat değişebilir; işlem yapmadan önce güncel metni ve bir avukatın görüşünü al.</p>
+        </div>
+      </details>
+    </section>
+
+    <!-- KVKK -->
+    <section class="panel" id="p-kvkk" hidden></section>
+
+    <!-- PROFİL VE TEMA -->
+    <section class="panel" id="p-profil" hidden>
+      <div class="card form">
+        <h3>Profil <small class="note">(rapor ve dilekçelerde kullanılır)</small></h3>
+        <div class="field"><label class="lb" for="pr-ad">Ad soyad</label><input id="pr-ad"></div>
+        <div class="row stack">
+          <div class="field"><label class="lb" for="pr-unvan">Unvan</label><input id="pr-unvan" placeholder="Örn. Radyoloji teknikeri"></div>
+          <div class="field"><label class="lb" for="pr-sicil">Sicil no <small>(isteğe bağlı)</small></label><input id="pr-sicil"></div>
+        </div>
+        <div class="field"><label class="lb" for="pr-kurum">Kurum</label><input id="pr-kurum" placeholder="Örn. ... Devlet Hastanesi"></div>
+        <div class="field"><label class="lb" for="pr-birim">Birim</label><input id="pr-birim" placeholder="Örn. Radyoloji servisi"></div>
+        <div class="field"><label class="lb" for="pr-hitap">Sana nasıl hitap edelim?</label><input id="pr-hitap"></div>
+        <div class="field"><span class="lb">Çalıştığın yer</span>
+          <div class="seg" role="group"><button type="button" data-sek="kamu" aria-pressed="true">Kamu</button><button type="button" data-sek="ozel" aria-pressed="false">Özel sektör</button></div></div>
+        <button class="btn" type="button" id="pr-save">Profili kaydet</button>
+        <p class="msg" id="pr-msg" role="status"></p>
+      </div>
+      <div class="card">
+        <h3>Tema rengi</h3>
+        <div class="swatches" id="swatches"></div>
+        <h3>Görünüm</h3>
+        <div class="seg" id="modeSeg" role="group"><button type="button" data-m="auto">Otomatik</button><button type="button" data-m="light">Açık</button><button type="button" data-m="dark">Koyu</button></div>
+        <h3>Yazı boyutu</h3>
+        <div class="seg" id="sizeSeg" role="group"><button type="button" data-s="16">Normal</button><button type="button" data-s="18">Büyük</button><button type="button" data-s="20">Çok büyük</button></div>
+      </div>
+    </section>
+
+    <!-- GÜVENLİK -->
+    <section class="panel" id="p-guvenlik" hidden>
+      <div class="card">
+        <h3>Otomatik kilit</h3>
+        <p class="note">Uygulamadan çıktığında ne kadar sonra kilitlensin?</p>
+        <div class="seg" id="lockSeg" role="group"><button type="button" data-l="0">Hemen</button><button type="button" data-l="60">1 dk</button><button type="button" data-l="300">5 dk</button></div>
+      </div>
+      <div class="card">
+        <label class="toggle"><span><b>10 yanlış PIN'de her şeyi sil</b><br><span class="note">Telefonun başkasının eline geçerse kayıtların okunamaz hale gelir. Açarsan yedek almayı unutma.</span></span><input type="checkbox" id="g-wipe"></label>
+      </div>
+      <div class="card form">
+        <h3>PIN'i değiştir</h3>
+        <div class="row">
+          <div class="field"><label class="lb" for="c-pin">Yeni PIN</label><input class="pin" id="c-pin" type="password" inputmode="numeric" maxlength="8"></div>
+          <div class="field"><label class="lb" for="c-pin2">Tekrar</label><input class="pin" id="c-pin2" type="password" inputmode="numeric" maxlength="8"></div>
+        </div>
+        <button class="btn ghost" type="button" id="c-btn">PIN'i değiştir</button>
+        <p class="msg" id="c-msg" role="status"></p>
+      </div>
+      <div class="card">
+        <h3>Uygulanan önlemler</h3>
+        <ul class="note" style="margin:0;padding-left:1.1rem;display:flex;flex-direction:column;gap:4px">
+          <li>Kayıtlar ve fotoğraflar AES-256 ile şifrelenir. Anahtar PIN'inden türetilir ve hiçbir yere kaydedilmez.</li>
+          <li>Uygulama internete veri gönderemez. Bu, sayfaya eklenen bir güvenlik kuralıyla engellenmiştir.</li>
+          <li>Uygulama arka plana geçince ekran örtülür, uygulama değiştiricide içerik görünmez.</li>
+          <li>Fotoğraflardaki konum ve cihaz bilgileri silinir.</li>
+          <li>Yanlış PIN denemeleri sınırlanır.</li>
+          <li>Ana ekrandaki ad ve ikon sade tutulmuştur.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Tüm verileri sil</h3>
+        <p class="note">Tüm kayıtlar, başvurular ve fotoğraflar bu telefondan kalıcı olarak silinir.</p>
+        <button class="btn ghost danger" type="button" id="wipeBtn">Tüm verileri sil</button>
+      </div>
+    </section>
+
+    <!-- YEDEK -->
+    <section class="panel" id="p-yedek" hidden>
+      <div class="card">
+        <h3>Yedek al</h3>
+        <p class="note">Kayıtların sadece bu telefonda. Telefon kaybolur ya da uygulama silinirse kayıtlar da gider. <b>Haftada bir yedek al</b> ve iCloud Drive gibi güvenli bir yere kaydet. Yedek dosyası da PIN'inle şifrelidir.</p>
+        <p class="chip acc" id="lastBackup" style="align-self:flex-start"></p>
+        <button class="btn" type="button" id="bkShare">Yedek al</button>
+        <p class="msg" id="bkMsg" role="status"></p>
+      </div>
+      <div class="card form">
+        <h3>Yedekten geri yükle</h3>
+        <p class="note">Yedekteki kayıtlar mevcut kayıtlarına eklenir, hiçbir şey silinmez.</p>
+        <div class="field"><label class="lb" for="bk-pin">Yedeği aldığın PIN</label><input class="pin" id="bk-pin" type="password" inputmode="numeric" maxlength="8"></div>
+        <input type="file" id="bk-file" accept=".json,application/json" hidden>
+        <button class="btn ghost" type="button" id="bkRestore">Yedek dosyası seç</button>
+        <p class="msg" id="bkMsg2" role="status"></p>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabbar" role="tablist" aria-label="Bölümler">
+    <button role="tab" data-tab="ana" aria-selected="true"><svg viewBox="0 0 24 24"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg>Ana sayfa</button>
+    <button role="tab" data-tab="kayitlar" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Kayıtlar</button>
+    <button role="tab" data-tab="ekle" aria-selected="false" class="fab" aria-label="Olay ekle"><span class="circle"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span>Ekle</button>
+    <button role="tab" data-tab="basvurular" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>Başvurular</button>
+    <button role="tab" data-tab="menu" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menü</button>
+  </nav>
+</div>
+
+<div class="curtain" id="curtain" hidden><img src="icon-192.png" alt=""></div>
+<div class="viewer" id="viewer" hidden><button type="button" id="viewerClose">Kapat</button><img id="viewerImg" alt=""><p id="viewerCap"></p></div>
+
+<!-- Yazdırma alanı (ekranda görünmez) -->
+<div id="print"></div>
+
+<!-- KVKK metni (iki yerde gösterilir) -->
+<template id="kvkkTpl">
+  <div class="card">
+    <h2>Kişisel Verilerin Korunması (KVKK) Bilgilendirmesi</h2>
+    <p class="note">6698 sayılı Kişisel Verilerin Korunması Kanunu çerçevesinde hazırlanmıştır. Son güncelleme: Kasım 2026.</p>
+  </div>
+  <details class="doc" open><summary>1. Hangi veriler işlenir?</summary><div class="body">
+    <p>Uygulamaya senin girdiğin bilgiler: olayların tarihi, yeri, anlatımı; olaylarla ilgili kişilerin adı, unvanı, söz ve davranışları; tanık adları; fotoğraflar; başvuru bilgileri; profil bilgilerin (ad, unvan, kurum).</p>
+    <p>"Sağlığına etkisi" alanına yazdıkların, KVKK md. 6 uyarınca <b>özel nitelikli kişisel veri</b> (sağlık verisi) sayılabilir. Bu alan isteğe bağlıdır ve rapora eklenip eklenmeyeceğini sen seçersin.</p>
+  </div></details>
+  <details class="doc"><summary>2. Veriler nerede tutulur?</summary><div class="body">
+    <p>Tüm veriler <b>yalnızca bu cihazda</b>, PIN'inden türetilen bir anahtarla <b>AES-256</b> yöntemiyle şifreli olarak tutulur. Uygulama hiçbir sunucuya veri göndermez. Uygulamayı yayınlayan kişi de dahil, hiç kimse verilerine erişemez. Verilerin cihazdan ancak senin yedek alman ya da rapor/dilekçe paylaşmanla çıkar.</p>
+  </div></details>
+  <details class="doc"><summary>3. Hukuki çerçeve</summary><div class="body">
+    <ul>
+      <li><b>Kişisel kullanım istisnası:</b> KVKK md. 28/1-a'ya göre kişisel verilerin üçüncü kişilere verilmemek ve veri güvenliğine ilişkin yükümlülüklere uyulmak kaydıyla, gerçek kişiler tarafından tamamen kendisiyle ilgili faaliyetler kapsamında işlenmesine Kanun uygulanmaz. Kayıtlarını kendin için tuttuğun sürece bu kapsamdadır.</li>
+      <li><b>Kayıtları paylaştığında:</b> Rapor ya da dilekçeyi bir kuruma, avukata veya mahkemeye verdiğinde veriler üçüncü kişilere aktarılmış olur. Bu durumda KVKK md. 5/2-e'deki "bir hakkın tesisi, kullanılması veya korunması için veri işlemenin zorunlu olması" hukuki sebebi gündeme gelebilir.</li>
+      <li><b>Özel nitelikli veriler:</b> Sağlık verileri gibi özel nitelikli veriler KVKK md. 6 kapsamında daha sıkı korunur. Bu madde 7499 sayılı Kanunla 2024'te değiştirilmiştir.</li>
+      <li><b>Veri güvenliği:</b> KVKK md. 12, verilerin hukuka aykırı erişime karşı korunması için gerekli teknik ve idari tedbirlerin alınmasını öngörür. Uygulamadaki şifreleme, PIN kilidi ve otomatik kilit bu amaca hizmet eder.</li>
+    </ul>
+  </div></details>
+  <details class="doc"><summary>4. Senin sorumlulukların</summary><div class="body">
+    <ul>
+      <li>Raporu ve dilekçeleri yalnızca <b>yetkili mercilere</b>, avukatına ya da sendikana ver.</li>
+      <li>Kayıtları <b>sosyal medyada ya da gruplarda paylaşma.</b> Kişilik hakları, hakaret ve kişisel veri ihlali gibi hukuki riskler doğurabilir.</li>
+      <li>Olayla ilgisi olmayan kişisel bilgileri yazma. Veriler amaçla bağlantılı, sınırlı ve ölçülü olmalıdır (KVKK md. 4).</li>
+      <li>Tanıkların bilgilerini paylaşmadan önce onlarla konuş.</li>
+      <li>PIN'ini kimseyle paylaşma, telefonunun ekran kilidini açık tut, düzenli yedek al.</li>
+    </ul>
+  </div></details>
+  <details class="doc"><summary>5. Uyarı</summary><div class="body">
+    <p>Bu metin genel bilgilendirme amaçlıdır ve hukuki görüş değildir. Uygulama başkaları tarafından kullanılmak üzere yayınlanmadan önce bir hukukçu tarafından gözden geçirilmesi önerilir.</p>
+    <p class="src">Kaynak: 6698 s. KVKK md. 3, 4, 5, 6, 12, 28 · 7499 s.K. (02.03.2024) değişiklikleri.</p>
+  </div></details>
+</template>
+
+<script src="app.js"></script>
+</body>
+</html>
